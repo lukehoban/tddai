@@ -2,7 +2,9 @@
 
 import { $ } from "bun";
 import { watch } from "fs";
-import { getCommitMessage, getNewCode } from './ai';
+import { AIClient } from './ai';
+
+const aiClient = new AIClient(true);
 
 async function main() {
     const args = process.argv.slice(2);
@@ -18,17 +20,17 @@ async function main() {
 
     async function stepUntilTestsPass() {
         const gitRef = (await $`git rev-parse HEAD`.cwd(folder).text()).trim();
+        
         console.log("Testing your code...");
         while (!(await step(folder, gitRef.trim()))) { }
         console.log("All tests passed!");
+        
         console.log("Squashing commits...");
-        console.log("Done!\n\n")
-
         const gitLog = await $`git log -p ${gitRef}..HEAD`.cwd(folder).text();
-        
-        const commitMsg = await getCommitMessage(gitLog);
-        
+        const commitMsg = await aiClient.getCommitMessage(gitLog);
         await $`git reset --soft ${gitRef} && git commit -m ${commitMsg}`.cwd(folder).nothrow().text();
+        
+        console.log("Done!\n\n")
         runningTestPromise = null;
     }
 
@@ -56,7 +58,7 @@ async function step(folder: string, gitRefStart: string): Promise<boolean> {
 
     const gitLog = await $`git log -p ${gitRefStart}..HEAD`.cwd(folder).text();
 
-    const { plan, code, commit_message } = await getNewCode(gitLog, testFileText, mainFileText, errors);
+    const { plan, code, commit_message } = await aiClient.getNewCode(gitLog, testFileText, mainFileText, errors);
 
     // Render the plan
     console.log(plan);
