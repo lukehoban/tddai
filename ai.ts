@@ -11,7 +11,7 @@ export class AIClient {
             this.client = new Anthropic({
                 apiKey: process.env['ANTHROPIC_API_KEY'],
             });
-            this.model = 'claude-3-5-sonnet-20240620';
+            this.model = 'claude-3-5-sonnet-20241022';
         } else {
             this.client = new OpenAI({
                 apiKey: process.env['OPENAI_API_KEY'],
@@ -100,7 +100,7 @@ export class AIClient {
         You will be invoked repeatedly until the code you provide passes all tests.
         If the user changes their tests, the process will start again.
         You *must* make changes to the code each time. 
-        You should do light refactoring to "clean up" and "simplify" the code as well as fixing any errors that are present.
+        You should cleanup code as you go.  Remove unused code, simplify implementations where possible, and ensure that the implementation is as minimal as possible to satisfy passing the tests in as clean and generalizable of code as possible.
         `;
 
         const prompt = `
@@ -122,6 +122,7 @@ export class AIClient {
         \`\`\`
         Please write the new code that should be placed in the \`main.go\` file.  
         You must make a change to the code if there were any errors. 
+        Before you start, please provide a short description of how you are planning to change the code.
         `;
 
         const responseSchema = z.object({
