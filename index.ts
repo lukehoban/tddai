@@ -4,7 +4,7 @@ import { $ } from "bun";
 import { watch } from "fs";
 import { AIClient } from './ai';
 
-const aiClient = new AIClient(true);
+const aiClient = new AIClient();
 
 async function main() {
     const args = process.argv.slice(2);
@@ -58,7 +58,7 @@ async function step(folder: string, gitRefStart: string): Promise<boolean> {
 
     const gitLog = await $`git log -p ${gitRefStart}..HEAD`.cwd(folder).text();
 
-    const { plan, code, commit_message } = await aiClient.getNewCode(gitLog, testFileText, mainFileText, errors);
+    const { plan, code, commitMessage } = await aiClient.getNewCode(gitLog, testFileText, mainFileText, errors);
 
     // Render the plan
     console.log(plan);
@@ -69,7 +69,7 @@ async function step(folder: string, gitRefStart: string): Promise<boolean> {
     await Bun.write(`${folder}/main.go`, newMainFileText);
 
     // Finally create a Git commit
-    const gitCommitCmd = await $`git add . && git commit --allow-empty -m ${JSON.stringify(commit_message)}`.cwd(folder);
+    const gitCommitCmd = await $`git add . && git commit --allow-empty -m ${JSON.stringify(commitMessage)}`.cwd(folder);
 
     return false;
 }
