@@ -3,6 +3,7 @@
 import { $ } from "bun";
 import { watch } from "fs";
 import { AIClient } from './ai';
+import chalk from "chalk";
 
 const aiClient = new AIClient();
 
@@ -10,7 +11,7 @@ async function main() {
     const args = process.argv.slice(2);
     const folder = args[0] ?? "./example";
 
-    console.log("Welcome to Test Driven AI Development!\n");
+    console.log(chalk.blue.bold("\n\nWelcome to Test Driven AI Development!\n"));
 
     // Just in case, force initialize the folder as a Git repository. 
     // This should be a no-op if it is already a Git repository.
@@ -20,17 +21,19 @@ async function main() {
 
     async function stepUntilTestsPass() {
         const gitRef = (await $`git rev-parse HEAD`.cwd(folder).text()).trim();
-        
-        console.log("Testing your code...");
+
+        console.log(chalk.green("Testing your code..."));
         while (!(await step(folder, gitRef.trim()))) { }
-        console.log("All tests passed!");
-        
-        console.log("Squashing commits...");
+        console.log(chalk.green("All tests passed!"));
+
+        console.log(chalk.green("Squashing commits..."));
         const gitLog = await $`git log -p ${gitRef}..HEAD`.cwd(folder).text();
-        const commitMsg = await aiClient.getCommitMessage(gitLog);
-        await $`git reset --soft ${gitRef} && git commit -m ${commitMsg}`.cwd(folder).nothrow().text();
-        
-        console.log("Done!\n\n")
+        if (gitLog.trim() !== "") {
+            const commitMsg = await aiClient.getCommitMessage(gitLog);
+            await $`git reset --soft ${gitRef} && git commit -m ${commitMsg}`.cwd(folder).nothrow().text();
+        }
+
+        console.log(chalk.green("Done!\n\n"));
         runningTestPromise = null;
     }
 
@@ -42,7 +45,7 @@ async function main() {
             }
         }
     });
-    
+
     runningTestPromise = stepUntilTestsPass();
 }
 
@@ -55,21 +58,34 @@ async function step(folder: string, gitRefStart: string): Promise<boolean> {
         return true;
     }
     const errors = testCmd.text();
+    console.log(chalk.red("Tests failed..."));
 
     const gitLog = await $`git log -p ${gitRefStart}..HEAD`.cwd(folder).text();
 
-    const { plan, code, commitMessage } = await aiClient.getNewCode(gitLog, testFileText, mainFileText, errors);
+    const response = aiClient.getNewCode(gitLog, testFileText, mainFileText, errors);
 
-    // Render the plan
-    console.log(plan);
+    for await (const { name, text } of response) {
+        switch (name) {
+            case "plan":
+                // Render the plan
+                console.log(chalk.green("Plan to fix:"));
+                console.log(text);
+                break;
+            case "code":
+                console.log(chalk.green("Modifying code..."));
+                // Then write the code to the `main.go` file
+                let newMainFileText = text;
+                newMainFileText = newMainFileText.match(/```go\n([\s\S]*)\n```/)?.[1] ?? newMainFileText;
+                await Bun.write(`${folder}/main.go`, newMainFileText);
+                break;
+            case "commitMessage":
+                console.log(chalk.green("Writing commit message..."));
+                // Finally create a Git commit
+                await $`git add . && git commit --allow-empty -m ${JSON.stringify(text)}`.cwd(folder);
+                break;
+        }
+    }
 
-    // Then write the code to the `main.go` file
-    let newMainFileText = code;
-    newMainFileText = newMainFileText.match(/```go\n([\s\S]*)\n```/)?.[1] ?? newMainFileText;
-    await Bun.write(`${folder}/main.go`, newMainFileText);
-
-    // Finally create a Git commit
-    const gitCommitCmd = await $`git add . && git commit --allow-empty -m ${JSON.stringify(commitMessage)}`.cwd(folder);
 
     return false;
 }
